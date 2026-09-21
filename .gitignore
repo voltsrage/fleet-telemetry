@@ -1,0 +1,35 @@
+# Build
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# Env & secrets — never commit these
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+*.pfx
+
+# Test output
+TestResults/
+coverage/
+*.trx
+
+# k6
+load/results/*.json
+!load/results/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
