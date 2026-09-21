@@ -1,0 +1,11 @@
+# This repository is documentation for a private implementation. The only
+# code here is the k6 load scripts, which are tooling rather than the
+# subject — without this, GitHub labels the whole repo "JavaScript", which
+# is misleading on a page describing a .NET service.
+load/*.js linguist-documentation
+
+# Normalise line endings so the docs read the same on Windows and Linux.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.svg binary
