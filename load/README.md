@@ -4,13 +4,7 @@ The ingest path returns `202` without touching PostgreSQL ([ADR 0001](../docs/ad
 
 ## Running
 
-Locally, against Compose:
-
-```bash
-k6 run -e DEVICE_ID=<id> -e DEVICE_TOKEN=<token> load/telemetry-ingest.js
-```
-
-Against the deployed demo:
+Against the live deployment (the implementation is private, so this is the target):
 
 ```bash
 k6 run -e BASE_URL=https://fleet-telemetry.vectur45.com \

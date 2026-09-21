@@ -1,6 +1,5 @@
 # Fleet Telemetry API
 
-[![ci](https://git.vectur45.com/Trent/fleet-telemetry/actions/workflows/ci.yml/badge.svg)](https://git.vectur45.com/Trent/fleet-telemetry/actions?workflow=ci.yml)
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
@@ -8,7 +7,10 @@ High-volume IoT fleet telemetry: async ingest that never silently drops a readin
 
 **Live demo:** https://fleet-telemetry.vectur45.com
 
-> Development happens on a self-hosted Gitea instance at `git.vectur45.com`; GitHub is a mirror. That is why CI lives in `.gitea/workflows/` and the badge above points off-site.
+
+> **What this repository is.** This documents the design of a **private implementation**. The system is built, deployed and running — the demo above is live — but the source is not public. What you will find here: the design decisions with their rejected alternatives and costs, the architecture, the domain model, the API shape, and load-test scripts that run against the live deployment.
+>
+> Source access for hiring conversations is available on request.
 
 ---
 
@@ -72,31 +74,22 @@ Two tiers, because an operator and a device are not the same principal.
 
 Device tokens are stored as SHA-256 hashes; the raw value is shown once at issue. Middleware additionally requires the authenticated device ID to match the `{deviceId}` in the route, so a valid token for device A cannot post as device B.
 
-## Running it locally
+## Implementation
 
-```bash
-git clone https://github.com/voltsrage/fleet-telemetry.git
-cd fleet-telemetry
-cp .env.example .env
-docker compose up
-```
+ASP.NET Core 8 · PostgreSQL + EF Core 8 (code-first migrations) · RabbitMQ · Polly (timeout, retry, circuit breaker) on the outbound stale-device webhook · Serilog → Seq · Prometheus at `/metrics` · Vite + React + TypeScript operator console served by nginx · CI/CD on Gitea Actions.
 
-Requires PostgreSQL 15+ and RabbitMQ 3.12+ (both in the Compose file). Migrations apply automatically in Development. Swagger is at `http://localhost:5067/swagger`, Development only.
+Roughly 97 C# files across the API and test projects, plus the operator console.
 
-The operator console:
-
-```bash
-cd FleetTelemetryUI && npm ci && npm run dev    # http://localhost:5173
-```
-
-The console includes a **device simulator** — the fastest way to see the system work end to end without flashing firmware. Register a device, issue it a token, start the simulator, and watch readings land.
+The console carries a **device simulator** — a separate Bearer-token persona that posts telemetry, polls for commands and acknowledges them. It is how the system is exercised end to end without flashing firmware, and it is what drives the live demo.
 
 ## API
+
+The shape of the surface. Unlike the other two demos, these routes need a provisioned credential — an operator `X-Api-Key` for management and reads, a per-device Bearer token for ingest — so the console's built-in device simulator is the way to see them exercised.
 
 Ingest a reading (device token):
 
 ```bash
-curl -X POST http://localhost:5067/api/v1/devices/{deviceId}/telemetry \
+curl -X POST https://fleet-telemetry.vectur45.com/api/v1/devices/{deviceId}/telemetry \
   -H 'Authorization: Bearer <device-token>' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -114,14 +107,14 @@ X-Correlation-Id: 0f9c2a1e-...
 Aggregate over a window (operator key):
 
 ```bash
-curl 'http://localhost:5067/api/v1/devices/{deviceId}/telemetry/aggregate?metric=temperature_c&bucket=1h&from=2026-09-21T00:00:00Z' \
+curl 'https://fleet-telemetry.vectur45.com/api/v1/devices/{deviceId}/telemetry/aggregate?metric=temperature_c&bucket=1h&from=2026-09-21T00:00:00Z' \
   -H 'X-Api-Key: <operator-key>'
 ```
 
 Replay a dead letter:
 
 ```bash
-curl -X POST http://localhost:5067/api/v1/admin/dead-letters/{id}/replay \
+curl -X POST https://fleet-telemetry.vectur45.com/api/v1/admin/dead-letters/{id}/replay \
   -H 'X-Api-Key: <operator-key>'
 ```
 
@@ -129,13 +122,9 @@ Buckets are `1m` / `1h` / `1d` / `1w` / `1mo`. History supports pagination, time
 
 ## Testing
 
-```bash
-dotnet test                                  # xUnit + Testcontainers (real PostgreSQL)
-cd FleetTelemetryUI && npm test              # Vitest + Testing Library + MSW
-cd FleetTelemetryUI && npx playwright test   # e2e journeys, incl. axe accessibility
-```
+xUnit with Testcontainers against a **real PostgreSQL container**, not an in-memory provider — because the behaviour that matters here is database behaviour. The guarded conditional UPDATE in [ADR 0003](docs/adr/0003-conditional-update-race-fix.md) and the unique constraint in [ADR 0002](docs/adr/0002-async-ingest-with-dead-letters.md) would both pass against an in-memory provider while failing for real.
 
-Integration tests run against a real PostgreSQL container rather than an in-memory provider, because the behaviour that matters here — the conditional UPDATE in [ADR 0003](docs/adr/0003-conditional-update-race-fix.md), the unique constraint in [ADR 0002](docs/adr/0002-async-ingest-with-dead-letters.md) — is database behaviour. An in-memory provider would pass while the real thing broke.
+The console is covered by Vitest with Testing Library and MSW, and Playwright end-to-end journeys including axe accessibility checks.
 
 **Not covered:** RabbitMQ broker failure mid-publish, and sustained multi-instance behaviour of the fleet-health cache (see [ADR 0004](docs/adr/0004-in-process-cache-known-limit.md)).
 
@@ -149,6 +138,12 @@ Starter Grafana dashboards are in `monitoring/grafana/dashboards/`.
 
 See [`load/`](load/) for k6 scripts and published results, with the hardware each run was measured on.
 
+## Source access
+
+The implementation is private. If you are evaluating this for a role and want to read the code, ask and I will arrange access.
+
+The design decisions in [`docs/adr/`](docs/adr/) are the substance of what the code does — each records what was chosen, what was rejected, and what it cost.
+
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+The documentation in this repository is MIT — see [LICENSE](LICENSE).
